@@ -17,7 +17,7 @@
 
 ### 2.添加任务
 在internal/jobaction/jobs目录下有两个例子LoginLogJob和SyncOrderJob。 编写任务大致流程：
-1. 在internal/jobaction/jobs目录下编写任务，任务必须实现jobplug接口，如下：
+1. 在internal/jobaction/jobs目录下编写任务，任务必须实现Plug接口，如下：
    ```go
    type Plug interface {
        // Action 定时任务需要实现此接口, res的字符数不能大于5000
