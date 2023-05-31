@@ -1,0 +1,360 @@
+// goctl rpc protoc job.proto --go_out=. --go-grpc_out=. --zrpc_out=. -m=false --style=goZero
+// 生成http： protoc --include_imports --proto_path=. --descriptor_set_out=jobcron.pb jobcron.proto
+syntax = "proto3";
+
+option go_package ="./pb";
+
+package job;
+
+import "google/api/annotations.proto";
+
+// ------------------------------------
+// Rpc service
+// ------------------------------------
+
+
+service JobCron{
+    //-----------------------job_record-----------------------
+    rpc CreateJobRecord(CreateJobRecordReq) returns (CreateJobRecordResp);
+    rpc UpdateJobRecord(UpdateJobRecordReq) returns (UpdateJobRecordResp);
+    rpc DeleteJobRecord(DeleteJobRecordReq) returns (DeleteJobRecordResp);
+    rpc DetailJobRecord(DetailJobRecordReq) returns (DetailJobRecordResp) {
+        option (google.api.http) = {
+            get: "/jobcron/DetailJobRecord/{id}"
+        };
+    }
+
+    rpc PageJobRecord(SearchJobRecordReq) returns (SearchJobRecordResp) {
+        option (google.api.http) = {
+            post: "/jobcron/PageJobRecord"
+            body: "*"
+        };
+    }
+
+
+    //-----------------------job_schedule-----------------------
+    rpc CreateJobSchedule(CreateJobScheduleReq) returns (CreateJobScheduleResp) {
+        option (google.api.http) = {
+            post: "/jobcron/CreateJobSchedule"
+            body: "*"
+        };
+    }
+
+    rpc UpdateJobSchedule(UpdateJobScheduleReq) returns (UpdateJobScheduleResp) {
+        option (google.api.http) = {
+            post: "/jobcron/UpdateJobSchedule"
+            body: "*"
+        };
+    }
+
+    rpc DeleteJobSchedule(DeleteJobScheduleReq) returns (DeleteJobScheduleResp) {
+        option (google.api.http) = {
+            delete: "/jobcron/DeleteJobSchedule/{id}"
+        };
+    }
+
+    rpc DetailJobSchedule(DetailJobScheduleReq) returns (DetailJobScheduleResp){
+        option (google.api.http) = {
+            get: "/jobcron/DetailJobSchedule/{id}"
+        };
+    }
+
+    rpc PageJobSchedule(SearchJobScheduleReq) returns (SearchJobScheduleResp) {
+        option (google.api.http) = {
+            post: "/jobcron/PageJobSchedule"
+            body: "*"
+        };
+    }
+
+    // 补偿任务，立即执行该key对应的任务
+    rpc JobCompensate(JobCompensateReq) returns (JobCompensateResp) {
+        option (google.api.http) = {
+            post: "/jobcron/JobCompensate"
+            body: "*"
+        };
+    }
+
+    // 强制重启job
+    rpc ForceRestartJob(ForceRestartJobReq) returns (ForceRestartJobResp) {
+        option (google.api.http) = {
+            post: "/jobcron/ForceRestartJob"
+            body: "*"
+        };
+    }
+
+    // 操作Schedule对象，包括restart、stop、start调度
+    rpc OperaSchedule(OperaScheduleReq) returns(OperaScheduleResp) {
+        option (google.api.http) = {
+            post: "/jobcron/OperaSchedule"
+            body: "*"
+        };
+    }
+
+    // 操作Schedule对象，包括restart、stop、start调度
+    rpc GetScheduleStatus(ScheduleStatusReq) returns(ScheduleStatusResp) {
+        option (google.api.http) = {
+            get: "/jobcron/GetScheduleStatus"
+        };
+    }
+
+}
+
+// ------------------------------------
+// Rpc message
+// ------------------------------------
+
+//-----------------------通用message-----------------------
+message IdReq {
+    int64 id = 1; //id
+}
+message IdsReq {
+    int64 ids = 1; //ids
+}
+message ResultStatus {
+    int64 code = 1;
+    string msg = 2;
+}
+//-----------------------job_record-----------------------
+message JobRecordView {
+    int64 id = 1; //
+    int64 jobId = 2; //任务id
+    int64 startTime = 3; //开始时间
+    int64 endTime = 4; //结束时间
+    string result = 5; //执行结果完整信息json格式
+    string status = 6; //结果状态，ok | error
+    int64 useMilli = 7; // 耗时（毫秒）
+    string execType = 8;
+}
+
+message CreateJobRecordReq {
+    int64 id = 1; //
+    int64 jobId = 2; //任务id
+    int64 startTime = 3; //开始时间
+    int64 endTime = 4; //结束时间
+    string result = 5; //执行结果完整信息json格式
+    string status = 6; //结果状态，ok | error
+}
+
+message CreateJobRecordResp {
+    ResultStatus resultStatus = 1;
+}
+
+message UpdateJobRecordReq {
+    int64 id = 1; //
+    int64 jobId = 2; //任务id
+    int64 startTime = 3; //开始时间
+    int64 endTime = 4; //结束时间
+    string result = 5; //执行结果完整信息json格式
+    string status = 6; //结果状态，ok | error
+}
+
+message UpdateJobRecordResp {
+    ResultStatus resultStatus = 1;
+}
+
+message DeleteJobRecordReq {
+    int64 id = 1; //
+}
+
+message DeleteJobRecordResp {
+    ResultStatus resultStatus = 1;
+}
+
+message DetailJobRecordReq {
+    int64 id = 1; //
+}
+
+message DetailJobRecordResp {
+    ResultStatus resultStatus = 8;
+    int64 id = 1; //
+    int64 jobId = 2; //任务id
+    int64 startTime = 3; //开始时间
+    int64 endTime = 4; //结束时间
+    string result = 5; //执行结果完整信息json格式
+    string status = 6; //结果状态，ok | error
+    int64 useMilli = 7; // 耗时（毫秒）
+}
+
+message SearchJobRecordReq {
+    int64 cursor = 1; // 分页游标
+    bool cursorAsc = 2; // 游标分页时方向 true:asc  false:desc
+    int64 pageSize = 3; // 每页条数
+    int64 pageCurrent = 4;  // 当前页
+    repeated string orderSort = 5;  // 排序 eg： ["create_time asc", "id desc"]
+    string searchPlus = 6; // 加强版搜索参数
+    int64 id = 8; //
+    int64 jobId = 9; //任务id
+    int64 startTime = 10; //开始时间
+    int64 endTime = 11; //结束时间
+    string result = 12; //执行结果完整信息json格式
+    string status = 13; //结果状态，ok | error
+    int64 useMilli = 14; // 耗时（毫秒）
+    string execType = 15;
+}
+
+message SearchJobRecordResp {
+    ResultStatus resultStatus = 8;
+    int64 total = 1;
+    int64 pageCurrent = 2;
+    int64 pageSize = 3;
+    int64 pageTotal = 4;
+    int64 lastCursor = 5;
+    repeated JobRecordView list = 7; // 列表
+}
+
+//-----------------------job_schedule-----------------------
+message JobScheduleView {
+    int64 id = 1; //
+    string jobName = 2; //任务名称
+    string des = 3; //描述
+    string cron = 4; //调度时间，cron表达式
+    int64 executeCount = 5; //
+    int64 failCount = 6; //失败次数
+    string nowStatus = 7; //当前状态，wait | readly | running
+    string jobStatus = 8; //任务转态, stop不加入调度 | enable加入调度中
+    int64 createTime = 9; //
+    int64 deleteFlag = 10; //
+    int64 updateTime = 11; //
+    string parallel = 12; //是否允许并发执行，allow | reject
+    string key = 13; //与程序中的任务key一致，唯一
+    int64 lock = 14;
+}
+
+message CreateJobScheduleReq {
+    int64 id = 1; //
+    string jobName = 2; //任务名称
+    string des = 3; //描述
+    string cron = 4; //调度时间，cron表达式
+    int64 executeCount = 5; //
+    int64 failCount = 6; //失败次数
+    string nowStatus = 7; //当前状态，wait | readly | running
+    string jobStatus = 8; //任务转态, stop不加入调度 | enable加入调度中
+    int64 createTime = 9; //
+    int64 deleteFlag = 10; //
+    int64 updateTime = 11; //
+    string parallel = 12; //是否允许并发执行，allow | reject
+    string key = 13; //与程序中的任务key一致，唯一
+}
+
+message CreateJobScheduleResp {
+    ResultStatus resultStatus = 1;
+}
+
+message UpdateJobScheduleReq {
+    int64 id = 1; //
+    string jobName = 2; //任务名称
+    string des = 3; //描述
+    string cron = 4; //调度时间，cron表达式
+    int64 executeCount = 5; //
+    int64 failCount = 6; //失败次数
+    string nowStatus = 7; //当前状态，wait | readly | running
+    string jobStatus = 8; //任务转态, stop不加入调度 | enable加入调度中
+    int64 createTime = 9; //
+    int64 deleteFlag = 10; //
+    int64 updateTime = 11; //
+    string parallel = 12; //是否允许并发执行，allow | reject
+    string key = 13; //与程序中的任务key一致，唯一
+}
+
+message UpdateJobScheduleResp {
+    ResultStatus resultStatus = 1;
+}
+
+message DeleteJobScheduleReq {
+    int64 id = 1; //
+}
+
+message DeleteJobScheduleResp {
+    ResultStatus resultStatus = 1;
+}
+
+message DetailJobScheduleReq {
+    int64 id = 1; //
+}
+
+message DetailJobScheduleResp {
+    ResultStatus resultStatus = 14;
+    int64 id = 1; //
+    string jobName = 2; //任务名称
+    string des = 3; //描述
+    string cron = 4; //调度时间，cron表达式
+    int64 executeCount = 5; //
+    int64 failCount = 6; //失败次数
+    string nowStatus = 7; //当前状态，wait | readly | running
+    string jobStatus = 8; //任务转态, stop不加入调度 | enable加入调度中
+    int64 createTime = 9; //
+    int64 deleteFlag = 10; //
+    int64 updateTime = 11; //
+    string parallel = 12; //是否允许并发执行，allow | reject
+    string key = 13; //与程序中的任务key一致，唯一
+    int64 lock = 15;
+}
+
+message SearchJobScheduleReq {
+    int64 cursor = 1; // 分页游标
+    bool cursorAsc = 2; // 游标分页时方向 true:asc  false:desc
+    int64 pageSize = 3; // 每页条数
+    int64 pageCurrent = 4;  // 当前页
+    repeated string orderSort = 5;  // 排序 eg： ["create_time asc", "id desc"]
+    string searchPlus = 6; // 加强版搜索参数
+    int64 id = 8; //
+    string jobName = 9; //任务名称
+    string des = 10; //描述
+    string cron = 11; //调度时间，cron表达式
+    int64 executeCount = 12; //
+    int64 failCount = 13; //失败次数
+    string nowStatus = 14; //当前状态，wait | readly | running
+    string jobStatus = 15; //任务转态, stop不加入调度 | enable加入调度中
+    int64 createTime = 16; //
+    int64 deleteFlag = 17; //
+    int64 updateTime = 18; //
+    string parallel = 19; //是否允许并发执行，allow | reject
+    string key = 20; //与程序中的任务key一致，唯一
+}
+
+message SearchJobScheduleResp {
+    ResultStatus resultStatus = 8;
+    int64 total = 1;
+    int64 pageCurrent = 2;
+    int64 pageSize = 3;
+    int64 pageTotal = 4;
+    int64 lastCursor = 5;
+    repeated JobScheduleView list = 7; // 列表
+}
+
+message JobCompensateReq {
+    string key = 1; // 任务key必填
+    string params = 2; //参数json字符串，选填
+    bool background = 3; //是否后台运行， true后台运行非阻塞， false阻塞
+}
+
+message JobCompensateResp {
+    ResultStatus resultStatus = 2;
+    string result = 1;
+}
+
+message ForceRestartJobReq {
+    int64 id = 1;
+    string key = 2;
+}
+message ForceRestartJobResp {
+    ResultStatus resultStatus = 1;
+}
+
+message OperaScheduleReq {
+    string action = 1; //start | stop | restart
+}
+
+message OperaScheduleResp {
+    ResultStatus resultStatus = 3;
+    string action = 1; //start | stop | restart
+    string status = 2; // running | stop
+}
+
+message ScheduleStatusReq {
+
+}
+message ScheduleStatusResp {
+    ResultStatus resultStatus = 1;
+    string status= 2;
+}

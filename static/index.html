@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>任务调度</title>
+        <!-- Import style -->
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-plus/dist/index.css"/>
+        <!-- Import Vue 3 -->
+        <script src="https://cdn.jsdelivr.net/npm/vue@3.3.1/dist/vue.global.min.js"></script>
+        <!-- Import component library -->
+        <script src="https://cdn.jsdelivr.net/npm/element-plus"></script>
+        <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    </head>
+    <body>
+        <el-row id="app" justify="center">
+
+            <el-col :span="16" style="margin: 0 auto">
+                <!--    header-->
+                <div style="margin-bottom: 16px">
+                    <el-tag size="large" round style="font-size: 20px; font-weight: 400">任务调度平台</el-tag>
+                </div>
+
+                <component :is="currentView"></component>
+            </el-col>
+        </el-row>
+        <script>
+            const host = "${host}";
+
+            function matchRoute(routePattern, path) {
+                let params = {}
+                const rps = routePattern.split('/')
+                const ps1 = path.split('?')
+                const ps2 = ps1[0].split('/')
+                if (rps.length !== ps2.length) {
+                    return false
+                }
+                for (let i = 0; i < rps.length; i++) {
+                    let it = rps[i]
+                    if (it.startsWith(':')) {
+                        params[it.slice(1)] = ps2[i]
+                    } else {
+                        if (it !== ps2[i]) {
+                            return false
+                        }
+                    }
+                }
+                if (ps1.length !== 2) {
+                    return params
+                }
+                const searchParams = new URLSearchParams(ps1[1]);
+                for (const [key, value] of searchParams.entries()) {
+                    params[key] = value;
+                }
+                return params
+            }
+
+            const jobdetail = {
+                data() {
+                    return {
+                        id: 0,
+                        jobRecordCond: {
+                            pageSize: 20,
+                            pageCurrent: 1,
+                            orderSort: ['start_time desc']
+                        },
+                        jobInfo: {},
+                        jobExecRecord: {
+                            list: [],
+                            total: 0,
+                        },
+                        editJob: {},
+                        dialog: {
+                            update: false,
+                            compensate: false,
+                        },
+                        compensateParams: {
+                            key: '',
+                            params: undefined,
+                            background: true
+                        }
+                    }
+                },
+                methods: {
+                    getJobInfo() {
+                        axios({
+                            method: 'get',
+                            url: `${host}/jobcron/DetailJobSchedule/${this.id}`
+                        }).then(res => {
+                            this.jobInfo = res.data
+                            delete this.jobInfo['resultStatus']
+                        })
+                    },
+                    getExecRecord() {
+                        this.jobRecordCond['jobId'] = this.id
+                        axios({
+                            method: 'post',
+                            url: `${host}/jobcron/PageJobRecord`,
+                            data: this.jobRecordCond
+                        }).then(res => {
+                            this.jobExecRecord = res.data
+                            this.jobExecRecord.total = Number(res.data.total)
+                        })
+                    },
+                    handlerFilter(value) {
+                        this.jobRecordCond.status = value.status[0]
+                        this.getExecRecord()
+                    },
+                    updateJob() {
+                        this.editJob['id'] = this.id
+                        delete this.editJob['lock']
+                        axios({
+                            method: 'post',
+                            url: `${host}/jobcron/UpdateJobSchedule`,
+                            data: this.editJob
+                        }).then(res => {
+                            if (this.$printErrorResult(res.data)) {
+                                this.dialog.update = false
+                                this.getJobInfo()
+                            }
+                        })
+                    },
+                    updateJobStatus() {
+                        this.editJob.jobStatus = this.jobInfo.jobStatus === 'enable' ? 'stop' : 'enable'
+                        this.updateJob()
+                    },
+                    forceRestart() {
+                        axios({
+                            method: 'post',
+                            url: `${host}/jobcron/ForceRestartJob`,
+                            data: {key: this.jobInfo.key}
+                        }).then(res => {
+                            if (this.$printErrorResult(res.data)) {
+                                this.getJobInfo()
+                            }
+                        })
+                    },
+                    jobCompensate() {
+                        const load = ElementPlus.ElLoading.service({
+                            lock: true,
+                            text: '执行中...',
+                            background: 'rgba(0, 0, 0, 0.7)',
+                        })
+                        this.compensateParams.key = this.jobInfo.key
+                        axios({
+                            method: 'post',
+                            url: `${host}/jobcron/JobCompensate`,
+                            data: this.compensateParams
+                        }).then(res => {
+                            load.close()
+                            if (this.$printErrorResult(res.data)) {
+                                this.dialog.compensate = false
+                                this.getExecRecord()
+                            }
+                        })
+                    },
+                    deleteJob() {
+                        this.compensateParams.key = this.jobInfo.key
+                        axios({
+                            method: 'delete',
+                            url: `${host}/jobcron/DeleteJobSchedule/${this.id}`,
+                        }).then(res => {
+                            this.$href('#/')
+                        })
+                    }
+                },
+                created() {
+                    const p = matchRoute('/detail/:id', window.location.hash.slice(1) || '/')
+                    this.id = p['id']
+                    this.getJobInfo()
+                    this.getExecRecord()
+                },
+                template: `
+          <el-row>
+          <el-page-header title="返回" :content="jobInfo.key" @back="$href('#/')">
+            <template #extra>
+              <div class="flex justify-between">
+                <el-button v-show="jobInfo.jobStatus === 'enable'" type="primary" size="small" round
+                           style="margin-left: 8px" @click="forceRestart()">重启
+                </el-button>
+                <el-button type="warning" size="small" round @click="updateJobStatus()">
+                  {{ jobInfo.jobStatus === 'stop' ? '开启' : '关闭' }}
+                </el-button>
+                <el-button type="success" size="small" round @click="dialog.compensate = true">补偿</el-button>
+                <el-button type="info" size="small" round @click="()=> {dialog.update = true; editJob=jobInfo}">编辑
+                </el-button>
+                <el-popconfirm title="确认移除此任务?" cancel-button-text="算了" confirm-button-text="移除"
+                               confirm-button-type="danger" @confirm="deleteJob()">
+                  <template #reference>
+                    <el-button type="danger" size="small" round>移除</el-button>
+                  </template>
+                </el-popconfirm>
+              </div>
+            </template>
+          </el-page-header>
+          </el-row>
+          <el-row style="margin-top: 16px">
+          <el-card shadow="always" style="width: 100%">
+            <div>
+              <el-space wrap :size="32">
+                <label>
+                  <el-text>任务名称：</el-text>
+                  {{ jobInfo.jobName }}
+                </label>
+                <label>
+                  <el-text>当前状态：</el-text>
+                  <el-tag :type="jobInfo.nowStatus === 'running' ? 'success' : 'info'" round>{{ jobInfo.nowStatus }}
+                  </el-tag>
+                </label>
+                <label>
+                  <el-text>任务状态：</el-text>
+                  <el-tag :type="jobInfo.jobStatus === 'enable' ? 'warning' : 'info'" round>{{ jobInfo.jobStatus }}
+                  </el-tag>
+                </label>
+                <label>
+                  <el-text>执行次数：</el-text>
+                  {{ jobInfo.executeCount }}
+                </label>
+                <label>
+                  <el-text>失败次数：</el-text>
+                  {{ jobInfo.failCount }}
+                </label>
+                <label>
+                  <el-text>Cron表达式：</el-text>
+                  {{ jobInfo.cron }}
+                </label>
+              </el-space>
+            </div>
+            <div style="margin-top: 16px">
+              <el-space wrap :size="38">
+                <label>
+                  <el-text>是否允许并发执行：</el-text>
+                  {{ jobInfo.parallel }}
+                </label>
+                <label>
+                  <el-text>创建时间：</el-text>
+                  {{ $toDateTime(jobInfo.createTime, false) }}
+                </label>
+                <label>
+                  <el-text>锁状态：</el-text>
+                  {{ Number(jobInfo.lock) === 1 ? '占有' : '释放' }}
+                </label>
+              </el-space>
+            </div>
+            <div style="margin-top: 16px">
+              <el-space wrap :size="38">
+                <label>
+                  <el-text>描述：</el-text>
+                  {{ jobInfo.des }}
+                </label>
+              </el-space>
+            </div>
+          </el-card>
+          </el-row>
+
+          <el-row style="margin-top: 16px">
+          <el-card shadow="always" header="最近执行记录" style="width: 100%">
+            <template #header>
+              <div class="card-header" style="display: flex;justify-content: space-between">
+                <span>最近执行记录</span>
+                <el-button class="button" text round @click="getExecRecord()">刷新</el-button>
+              </div>
+            </template>
+            <el-table :data="jobExecRecord.list" @filter-change="handlerFilter" style="width: 100%">
+              <el-table-column prop="startTime" label="起止时间" width="180">
+                <template #default="scope">
+                  <span>{{ $toDateTime(scope.row.startTime) }}</span><br/>
+                  <span>{{ $toDateTime(scope.row.endTime) }}</span>
+                </template>
+              </el-table-column>
+              <!--              <el-table-column prop="endTime" label="执行结束" width="150"></el-table-column>-->
+              <el-table-column prop="useMilli" label="耗时(ms)" width="90"></el-table-column>
+              <el-table-column prop="execType" label="执行类型" width="120"></el-table-column>
+              <el-table-column prop="status" label="执行结果" width="130" column-key="status" :filter-multiple="false"
+                               :filters="[{ text: 'ok', value: 'ok' }, { text: 'error', value: 'error' },{ text: 'running', value: 'running' }]"
+              >
+                <template #default="scope">
+                  <el-tag
+                      :type="scope.row.status === 'ok' ? 'success' : scope.row.status === 'error' ? 'danger':'warning'"
+                      disable-transitions round
+                  >{{ scope.row.status }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="result" label="详情"></el-table-column>
+            </el-table>
+            <el-pagination background v-show="jobExecRecord.total !== 0" v-model:page-size="jobRecordCond.pageSize"
+                           layout="prev, pager, next"
+                           :total="jobExecRecord.total"
+                           @current-change="(value)=>{jobRecordCond.pageCurrent =value;getExecRecord() }"
+                           style="margin-top:24px"></el-pagination>
+          </el-card>
+          </el-row>
+
+          <el-dialog v-model="dialog.update" title="编辑任务" destroy-on-close style="border-radius: 5px">
+          <el-form :model="jobInfo" label-position="top" :inline="true" style="display: flex;flex-wrap: wrap;">
+            <el-row justy="space-between" style="width: 100%">
+              <el-col :span="12">
+                <el-form-item required label="名称" style="flex-basis: 46%;">
+                  <el-input v-model="editJob.jobName" autocomplete="off"/>
+                  <el-text size="small" type="info">任务名称</el-text>
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item required label="Key" style="flex-basis: 47%;">
+                  <el-input v-model="editJob.key" autocomplete="off"/>
+                  <el-text size="small" type="info">key不能重复, 与程序中Key()方法返回值一致</el-text>
+                </el-form-item>
+              </el-col>
+            </el-row>
+
+            <el-row justy="space-between" style="width: 100%">
+              <el-col :span="12">
+                <el-form-item required label="Cron" style="flex-basis: 46%;">
+                  <el-input v-model="editJob.cron" autocomplete="off"/>
+                  <el-text size="small" type="info">Cron表达式 6 位</el-text>
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="是否允许并发" style="flex-basis: 47%;">
+                  <el-switch v-model="editJob.parallel" active-value="allow" inactive-value="reject"/>
+                </el-form-item>
+              </el-col>
+            </el-row>
+
+            <el-row justy="space-between" style="width: 100%">
+              <el-col :span="24">
+                <el-form-item label="描述" style="flex-basis: 100%;">
+                  <el-input v-model="editJob.des" type="textarea" :rows="3" autocomplete="off"/>
+                  <el-text size="small" type="info">描述信息不超过 256 个字符</el-text>
+                </el-form-item>
+              </el-col>
+            </el-row>
+          </el-form>
+
+          <template #footer>
+                  <span>
+                    <el-button @click="dialog.update = false">取消</el-button>
+                    <el-button type="info" @click="updateJob()">确认</el-button>
+                  </span>
+          </template>
+          </el-dialog>
+
+          <el-dialog v-model="dialog.compensate" title="补偿任务" destroy-on-close style="border-radius: 5px">
+          <el-form :model="compensateParams" label-position="top" :inline="true" style="display: flex;flex-wrap: wrap;">
+            <el-form-item label="参数" style="flex-basis: 100%;">
+              <el-input v-model="compensateParams.params" type="textarea" :rows="7" autocomplete="off"/>
+              <el-text size="small" type="info">执行补偿方法所需参数, 必须符合json格式</el-text>
+            </el-form-item>
+            <el-form-item label="后台执行?" style="flex-basis: 47%;">
+              <el-switch v-model="compensateParams.background" :active-value="true" :inactive-value="false"/>
+            </el-form-item>
+          </el-form>
+          <template #footer>
+                      <span>
+                        <el-button @click="dialog.compensate = false">取消</el-button>
+                        <el-button type="info" @click="jobCompensate()">执行</el-button>
+                      </span>
+          </template>
+          </el-dialog>
+        `
+            }
+
+            const schduler = {
+                data() {
+                    return {
+                        schduleCond: {
+                            pageSize: 3,
+                            pageCurrent: 1,
+                            key: '',
+                            nowStatus: '',
+                            jobStatus: '',
+                        },
+                        schduleRecord: {
+                            list: [],
+                            total: 0,
+                        },
+                        dialog: {
+                            createJob: false
+                        },
+                        createJob: {
+                            key: '',
+                            jobName: '',
+                            des: '',
+                            cron: '',
+                            jobStatus: 'stop'
+                        },
+                        schduleStatus: 'close'
+                    };
+                },
+                methods: {
+                    Click() {
+                        axios({
+                            method: 'get',
+                            url: `${host}/jobcron/DetailJobSchedule/4`,
+                        })
+                    },
+                    GetSchduleList() {
+                        axios({
+                            method: 'post',
+                            url: `${host}/jobcron/PageJobSchedule`,
+                            data: this.schduleCond
+                        }).then(res => {
+                            this.schduleRecord = res.data
+                            this.schduleRecord.total = Number(res.data.total)
+                        })
+                    },
+                    handlerDetail(index, row) {
+                        this.$href(`#/detail/${row.id}`)
+                    },
+                    getSchduleStatus() {
+                        axios({
+                            method: 'get',
+                            url: `${host}/jobcron/GetScheduleStatus`,
+                        }).then(res => {
+                            this.schduleStatus = res.data.status
+                        })
+                    },
+                    createSchduleJob() {
+                        const load = ElementPlus.ElLoading.service({
+                            lock: true,
+                            text: '创建中...',
+                            background: 'rgba(0, 0, 0, 0.7)',
+                        })
+                        axios({
+                            method: 'post',
+                            url: `${host}/jobcron/CreateJobSchedule`,
+                            data: this.createJob
+                        }).then(res => {
+                            load.close()
+                            if (this.$printErrorResult(res.data)) {
+                                this.dialog.createJob = false
+                                this.GetSchduleList()
+                            }
+                        })
+                    },
+                    operSchdule(action) {
+                        if (action === '') return
+                        const load = ElementPlus.ElLoading.service({
+                            lock: true,
+                            text: '执行中...',
+                            background: 'rgba(0, 0, 0, 0.7)',
+                        })
+                        axios({
+                            method: 'post',
+                            url: `${host}/jobcron/OperaSchedule`,
+                            data: {'action': action}
+                        }).then(res => {
+                            load.close()
+                            if (this.$printErrorResult(res.data)) {
+                                this.schduleStatus = res.data.status
+                            }
+                        })
+                    }
+                },
+                created() {
+                    this.getSchduleStatus()
+                    this.GetSchduleList()
+                },
+                template: `
+          <el-row justify="space-between">
+          <el-col>
+            <el-button type="info" round @click="dialog.createJob = true">创建任务</el-button>
+            <el-button v-if="schduleStatus === 'close'" type="warning" round @click="operSchdule('start')">启动调度
+            </el-button>
+            <el-button v-if="schduleStatus === 'running'" type="warning" round @click="operSchdule('restart')">
+              重启调度
+            </el-button>
+            <el-button v-if="schduleStatus === 'running'" type="danger" round @click="operSchdule('close')">关闭调度
+            </el-button>
+          </el-col>
+          </el-row>
+          <el-row style="margin-top: 16px">
+          <el-card shadow="always" header="任务" style="width: 100%;min-height: 600px">
+            <el-table :data="schduleRecord.list" style="width: 100%">
+              <el-table-column prop="jobName" label="名称" width="180"></el-table-column>
+              <el-table-column prop="key" label="Key" width="150">
+                <template #default="scope">
+                  <el-link type="primary" :underline="false"
+                           @click="handlerDetail(scope.$index, scope.row)"
+                  >{{ scope.row.key }}
+                  </el-link>
+                </template>
+              </el-table-column>
+              <el-table-column prop="cron" label="Cron" width="110"></el-table-column>
+              <el-table-column prop="nowStatus" label="正在执行?" width="150">
+                <template #default="scope">
+                  <el-tag
+                      :type="scope.row.nowStatus === 'running' ? 'success' : 'info'"
+                      disable-transitions round
+                  >{{ scope.row.nowStatus }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="executeCount" label="执行次数" width="120"></el-table-column>
+              <el-table-column prop="failCount" label="失败次数" width="120"></el-table-column>
+              <el-table-column prop="parallel" label="并发?" width="120"></el-table-column>
+              <!--            <el-table-column prop="des" label="描述" show-overflow-tooltip width="180"></el-table-column>-->
+              <el-table-column prop="jobStatus" label="是否启动?" width="150">
+                <template #default="scope">
+                  <el-tag
+                      :type="scope.row.jobStatus === 'stop' ? 'warning' : 'danger'"
+                      disable-transitions round
+                  >{{ scope.row.jobStatus }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-card>
+          </el-row>
+
+          <el-dialog v-model="dialog.createJob" title="创建任务" destroy-on-close style="border-radius: 5px">
+          <el-form :model="createJob" label-position="top" :inline="true">
+            <el-row justy="space-between" style="width: 100%">
+              <el-col :span="12">
+                <el-form-item required label="名称">
+                  <el-input v-model="createJob.jobName" autocomplete="off"/>
+                  <el-text size="small" type="info">任务名称</el-text>
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item required label="Key">
+                  <el-input v-model="createJob.key" autocomplete="off"/>
+                  <el-text size="small" type="info">key不能重复, 与程序中Key()方法返回值一致</el-text>
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-row justy="space-between" style="width: 100%">
+              <el-col :span="12">
+                <el-form-item required label="Cron">
+                  <el-input v-model="createJob.cron" autocomplete="off"/>
+                  <el-text size="small" type="info">Cron表达式 6 位</el-text>
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="立即启动?">
+                  <el-switch v-model="createJob.jobStatus" type="info" active-value="enable" inactive-value="stop"/>
+                </el-form-item>
+            </el-row>
+
+            <el-row style="width: 100%">
+              <el-col :span="24">
+                <el-form-item label="描述">
+                  <el-input v-model="createJob.des" type="textarea" :rows="3" autocomplete="off"/>
+                  <el-text size="small" type="info">描述信息不超过 256 个字符, 建议写上补偿参数</el-text>
+                </el-form-item>
+              </el-col>
+            </el-row>
+
+          </el-form>
+          <template #footer>
+                  <span>
+                    <el-button @click="dialog.createJob = false">取消</el-button>
+                    <el-button type="info" @click="createSchduleJob()">确认</el-button>
+                  </span>
+          </template>
+          </el-dialog>
+        `
+            }
+
+            const routes = {
+                '/': schduler,
+                '/detail/:id': jobdetail
+            }
+
+            const App = {
+                components: {
+                    'v-schduler': schduler,
+                    'v-jobdetail': jobdetail,
+                },
+                data() {
+                    return {
+                        currentPath: window.location.hash,
+                        showComp: 'v-schduler',
+                        jobId: 4
+                    }
+                },
+                computed: {
+                    currentView() {
+                        for (const [key, value] of Object.entries(routes)) {
+                            const p = matchRoute(key, this.currentPath.slice(1) || '/')
+                            if (p) {
+                                return value || schduler
+                            }
+                        }
+                    }
+                },
+                methods: {
+                    handlerDetail(data) {
+                        this.showComp = 'v-jobdetail'
+                        this.jobId = data.id
+                    },
+                },
+                mounted() {
+                    window.addEventListener('hashchange', () => {
+                        this.currentPath = window.location.hash
+                    })
+                }
+            };
+
+            const app = Vue.createApp(App);
+            app.use(ElementPlus);
+
+            app.config.globalProperties.$toDateTime = function (unix, dateTime = true) {
+                if (unix === '' || unix === 0 || unix === '0') {
+                    return ''
+                }
+                const date = new Date(unix * 1000);
+                if (dateTime) {
+                    return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}:${date.getSeconds().toString().padStart(2, '0')}`
+                }
+                return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`
+            }
+
+            app.config.globalProperties.$printErrorResult = function (res) {
+                if (res.resultStatus && Number(res.resultStatus.code) !== 0) {
+                    ElementPlus.ElNotification({
+                        title: 'Error',
+                        message: res.resultStatus.msg,
+                        type: 'error',
+                    })
+                    return false
+                }
+                return true
+            }
+
+            app.config.globalProperties.$href = function (href) {
+                window.location.assign(href)
+            }
+
+            app.mount("#app");
+        </script>
+    </body>
+</html>

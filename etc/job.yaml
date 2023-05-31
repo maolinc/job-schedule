@@ -1,0 +1,30 @@
+Mode: dev
+Name: job.rpc
+ListenOn: 0.0.0.0:8023
+Timeout: 600000
+Gateway:
+  Name: gateway
+#  Host: localhost
+  Port: 8024
+  Timeout: 600000
+  Middlewares:
+    Timeout: false
+  Upstreams:
+    - Name: rpc-server
+      Grpc:
+        Endpoints:
+          - localhost:8023
+        RpcClientConf:
+          Timeout: 600000
+      ProtoSets:
+        - jobcron.pb
+
+IndexHost: http://127.0.0.1
+
+#Etcd:
+#  Hosts:
+#  - 127.0.0.1:2379
+#  Key: job.rpc
+
+DB:
+  DataSource: root:123456@tcp(127.0.0.1:3306)/maolinc?charset=utf8mb4&parseTime=true&loc=Asia%2FShanghai
