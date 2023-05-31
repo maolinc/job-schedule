@@ -12,8 +12,8 @@
    ```shell
    go run job.main
    ```
-   访问http://127.0.0.1:8024；8023端口是内部rpc使用, 8024端口为api和页面使用；
-   如果打包部署需要将etc/job.yaml中的Mode改为pro，否则方法不到页面
+   访问http://127.0.0.1:8024；8023端口为内部rpc使用, 8024端口为api和页面使用；
+   如果打包部署需要将etc/job.yaml中的Mode改为pro，否则访问不到页面
 
 ### 2.添加任务
 在internal/jobaction/jobs目录下有两个例子LoginLogJob和SyncOrderJob。 编写任务大致流程：
@@ -35,6 +35,8 @@
    任务的具体逻辑不必放在本项目里面，可以使用rpc方式调用业务逻辑，可在internal/svc/serviceContext.go的ServiceContext添加rpc即可；本项目使用go-zero框架
 2. 访问http://127.0.0.1:8024，点击创建任务，填写信息，key必须与步骤1中Key()结果一致
 3. 任务创建后点击进去，可以管理任务的运行，以及主动执行补偿方法
+![1](https://github.com/maolinc/job-schedule/assets/82015883/697a16ce-0006-4e2f-9baf-d5d8f05b9a14)
+![2](https://github.com/maolinc/job-schedule/assets/82015883/bb3e4576-c622-4e3b-8da6-f744566990cb)
 
 ### 3.项目使用到的框架和技术
 1. 后端使用go-zero框架编写rpc和http (使用proto同时提供rpc和http服务)
